@@ -48,12 +48,16 @@ UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 uint8_t eepromExampleWriteFlag = 0;
-uint8_t eepromExampleReadFlag = 0;
-uint8_t IOExpdrExampleWriteFlag = 0;
+uint8_t eepromExampleReadFlag = 1;
+uint8_t IOExpdrExampleWriteFlag = 1;
 uint8_t IOExpdrExampleReadFlag = 0;
-uint8_t eepromDataReadBack[4];
+uint8_t eepromDataReadBack[4]={ 1 ,1,1,1};
 uint8_t IOExpdrDataReadBack;
 uint8_t IOExpdrDataWrite = 0b01010101;
+uint64_t timestamp =0;
+uint64_t timestamp2 =0;
+uint8_t n=0;
+uint8_t x=0;
 
 /* USER CODE END PV */
 
@@ -63,7 +67,7 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
-void EEPROMWriteExample();
+void EEPROMWriteExample(uint8_t Wdata);
 void EEPROMReadExample(uint8_t *Rdata, uint16_t len);
 
 void IOExpenderInit();
@@ -90,7 +94,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+ HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -110,17 +114,30 @@ int main(void)
   /* USER CODE BEGIN 2 */
   HAL_Delay(100);
   IOExpenderInit();
+  EEPROMReadExample(eepromDataReadBack, 1);
+  HAL_Delay(100);
+  IOExpenderWritePinB(eepromDataReadBack[0]);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 	while (1) {
-		EEPROMWriteExample();
-		EEPROMReadExample(eepromDataReadBack, 4);
-
+		IOExpenderWritePinB(n);
+		if (HAL_GetTick()-timestamp>=30)
+		{
+			timestamp=HAL_GetTick();
+			IOExpdrExampleReadFlag = 1;
+			n=*&IOExpdrDataReadBack;
+		}
 		IOExpenderReadPinA(&IOExpdrDataReadBack);
-		IOExpenderWritePinB(IOExpdrDataWrite);
 
+
+
+		 IOExpenderWritePinB(n);
+		 if (HAL_GetTick()-timestamp2>=100)
+		 {
+		 EEPROMReadExample(eepromDataReadBack, 1);
+		 }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -257,11 +274,11 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;
@@ -270,15 +287,30 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
-void EEPROMWriteExample() {
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if(GPIO_Pin==GPIO_PIN_13)
+  {
+	  eepromExampleWriteFlag = 1;
+	  EEPROMWriteExample(n);
+	  IOExpdrExampleWriteFlag = 1;
+	  eepromExampleReadFlag = 1;
+	  timestamp2=HAL_GetTick();
+  }
+}
+void EEPROMWriteExample(uint8_t Wdata) {
 	if (eepromExampleWriteFlag && hi2c1.State == HAL_I2C_STATE_READY) {
 
-		static uint8_t data[4] = { 0xff, 0x00, 0x55, 0xaa };
-		HAL_I2C_Mem_Write_IT(&hi2c1, EEPROM_ADDR, 0x2C, I2C_MEMADD_SIZE_16BIT,
-				data, 4);
+		static uint8_t data ;
+		data= 0xffff&Wdata;
+		HAL_I2C_Mem_Write_IT(&hi2c1, EEPROM_ADDR, 0x36, I2C_MEMADD_SIZE_16BIT, &data, 1);
 
 
 
@@ -288,7 +320,7 @@ void EEPROMWriteExample() {
 void EEPROMReadExample(uint8_t *Rdata, uint16_t len) {
 	if (eepromExampleReadFlag && hi2c1.State == HAL_I2C_STATE_READY) {
 
-		HAL_I2C_Mem_Read_IT(&hi2c1, EEPROM_ADDR, 0x2c, I2C_MEMADD_SIZE_16BIT,
+		HAL_I2C_Mem_Read_IT(&hi2c1, EEPROM_ADDR, 0x36, I2C_MEMADD_SIZE_16BIT,
 				Rdata, len);
 		eepromExampleReadFlag = 0;
 	}
